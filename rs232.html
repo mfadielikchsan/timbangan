@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Scale Data Reader</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f8f9fa;
+        }
+        #container {
+            text-align: center;
+            padding: 40px;
+            border-radius: 12px;
+            background-color: #ffffff;
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.1);
+        }
+        #weight-display {
+            margin-top: 20px;
+            font-size: 3em;
+            color: #212529;
+            font-weight: bold;
+        }
+        .btn-custom {
+            padding: 10px 30px;
+            font-size: 1.2em;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container" class="container shadow-sm">
+        <h1 class="mb-4">Real-Time Scale Data Reader</h1>
+        <button class="btn btn-success btn-custom" onclick="startReading()">Connect to Scale</button>
+        <div id="weight-display" class="mt-4">No data</div>
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+
+    <script>
+        let lastWeight = ''; // Variable to store the last weight value
+        let displayData = 'No data'; // To store the current display value
+
+        async function requestPort() {
+            try {
+                const port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                return port;
+            } catch (error) {
+                console.error('Error opening the serial port:', error);
+                return null;
+            }
+        }
+
+        async function readFromScale(port) {
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+            const reader = textDecoder.readable.getReader();
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        break;
+                    }
+                    if (value) {
+                        const numericWeight = extractWeight(value);
+                        updateWeight(numericWeight);
+                    }
+                    // Wait for 500 ms before the next read
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            } catch (error) {
+                console.error('Error reading from the scale:', error);
+            } finally {
+                reader.releaseLock();
+            }
+        }
+
+        function extractWeight(data) {
+            // Use a regular expression to extract the numeric value
+            const match = data.match(/(\d+(\.\d+)?)/);
+            return match ? parseFloat(match[0]) : null;
+        }
+
+        function updateWeight(weight) {
+            if (weight !== null) {
+                const threshold = 0.01; // Minimum change to consider valid
+                if (Math.abs(weight - parseFloat(lastWeight)) > threshold || lastWeight === '') {
+                    lastWeight = weight.toFixed(2); // Save the weight with two decimal places
+                    displayData = lastWeight; // Update display data
+                    console.log('Weight updated:', lastWeight);
+                }
+                document.getElementById("weight-display").innerText = displayData;
+            }
+        }
+
+        async function startReading() {
+            const port = await requestPort();
+            if (port) {
+                await readFromScale(port);
+            }
+        }
+    </script>
+</body>
+</html>
